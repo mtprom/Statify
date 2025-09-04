@@ -33,18 +33,26 @@ def process_spotify_zip(uploaded_file):
                 for entry in data:
                     timestamp = entry.get('ts')
                     if not timestamp:
+                        continue  # sskips if there is no timestamp (error on a few lines)
+                    ms_played = entry.get('ms_played')
+                    
+                    # Filter out tracks longer than 1 hour (3,600,000 ms)
+                    if ms_played and ms_played > 3600000:
                         continue
                     
                     record = {
                         'timestamp': timestamp,
-                        'track_name': entry.get('master_metadata_track_name', 'Unknown'),
-                        'artist': entry.get('master_metadata_album_artist_name', 'Unknown'),
-                        'album': entry.get('master_metadata_album_album_name', 'Unknown'),
-                        'ms_played': entry.get('ms_played', 0),
-                        'platform': entry.get('platform', 'Unknown'),
-                        'skipped': entry.get('skipped', False),
-                        'shuffle': entry.get('shuffle', False),
-                        'offline': entry.get('offline', False)
+                        'platform': entry.get('platform'),
+                        'ms_played': ms_played,
+                        'track_name': entry.get('master_metadata_track_name'),
+                        'artist': entry.get('master_metadata_album_artist_name'),
+                        'album': entry.get('master_metadata_album_album_name'),
+                        'spotify_uri': entry.get('spotify_track_uri'),
+                        'skipped': entry.get('skipped'),
+                        'shuffle': entry.get('shuffle'),
+                        'offline': entry.get('offline'),
+                        'incognito_mode': entry.get('incognito_mode'),
+                        'source_file': file_name
                     }
                     records.append(record)
     
@@ -82,7 +90,7 @@ def calculate_metrics(df):
     }
 
 def main():
-    st.title("🎵 Spotify Data Explorer")
+    st.title("Spotify Data Explorer")
     st.markdown("Upload your Spotify data export ZIP file to explore your listening history!")
     
     # Sidebar

@@ -18,10 +18,16 @@ def process_spotify_history_combined_and_split(folder_path, output_folder, combi
                 timestamp = entry.get('ts')
                 if not timestamp:
                     continue  # sskips if there is no timestamp (error on a few lines)
+                ms_played = entry.get('ms_played')
+                
+                # Filter out tracks longer than 1 hour (3,600,000 ms)
+                if ms_played and ms_played > 3600000:
+                    continue
+                
                 record = {
                     'timestamp': timestamp,
                     'platform': entry.get('platform'),
-                    'ms_played': entry.get('ms_played'),
+                    'ms_played': ms_played,
                     'track_name': entry.get('master_metadata_track_name'),
                     'artist': entry.get('master_metadata_album_artist_name'),
                     'album': entry.get('master_metadata_album_album_name'),

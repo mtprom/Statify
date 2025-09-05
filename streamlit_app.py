@@ -79,6 +79,17 @@ def calculate_metrics(df):
     top_tracks = df.groupby(['track_name', 'artist'])['hours_played'].sum().nlargest(10)
     monthly_listening = df.groupby('month')['hours_played'].sum()
     
+    # Calculate most skipped songs (tracks with less than 15 seconds played)
+    df['is_skipped'] = df['ms_played'] < 15000
+    skipped_tracks = df[df['is_skipped']].groupby(['track_name', 'artist']).agg({
+        'is_skipped': 'count',
+        'ms_played': 'mean'
+    }).rename(columns={'is_skipped': 'skip_count', 'ms_played': 'avg_listen_time_ms'})
+    
+    # Only include tracks that were played multiple times and have high skip rate
+    frequently_played = skipped_tracks[skipped_tracks['skip_count'] >= 3]
+    most_skipped = frequently_played.nlargest(10, 'skip_count')
+    
     return {
         'total_hours': total_hours,
         'total_tracks': total_tracks,
@@ -86,7 +97,8 @@ def calculate_metrics(df):
         'unique_tracks': unique_tracks,
         'top_artists': top_artists,
         'top_tracks': top_tracks,
-        'monthly_listening': monthly_listening
+        'monthly_listening': monthly_listening,
+        'most_skipped': most_skipped
     }
 
 def main():
@@ -206,8 +218,8 @@ def show_dashboard(df, metrics):
     
     with col4:
         st.subheader("⏭️ Skip Rate Analysis")
-        # Consider tracks with less than 30 seconds as skipped
-        df['likely_skipped'] = df['ms_played'] < 30000
+        # Consider tracks with less than 15 seconds as skipped
+        df['likely_skipped'] = df['ms_played'] < 15000
         skip_rate = (df['likely_skipped'].sum() / len(df)) * 100
         
         st.metric("Estimated Skip Rate", f"{skip_rate:.1f}%")
@@ -218,7 +230,7 @@ def show_dashboard(df, metrics):
     
     # Detailed Tables
     with st.expander("📋 Detailed Data Tables"):
-        tab1, tab2, tab3 = st.tabs(["Top Artists", "Top Tracks", "Recent Activity"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Top Artists", "Top Tracks", "Most Skipped", "Recent Activity"])
         
         with tab1:
             artists_df = metrics['top_artists'].reset_index()
@@ -234,6 +246,16 @@ def show_dashboard(df, metrics):
             st.dataframe(tracks_df, use_container_width=True)
         
         with tab3:
+            if not metrics['most_skipped'].empty:
+                skipped_df = metrics['most_skipped'].reset_index()
+                skipped_df['avg_listen_seconds'] = (skipped_df['avg_listen_time_ms'] / 1000).round(1)
+                skipped_df = skipped_df[['track_name', 'artist', 'skip_count', 'avg_listen_seconds']]
+                skipped_df.columns = ['Track', 'Artist', 'Times Skipped', 'Avg Listen Time (sec)']
+                st.dataframe(skipped_df, use_container_width=True)
+            else:
+                st.info("No frequently skipped tracks found.")
+        
+        with tab4:
             recent_df = df.nlargest(100, 'timestamp')[['timestamp', 'track_name', 'artist', 'ms_played']].copy()
             recent_df['minutes_played'] = (recent_df['ms_played'] / (1000 * 60)).round(2)
             recent_df = recent_df.drop('ms_played', axis=1)

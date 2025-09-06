@@ -105,7 +105,7 @@ def main():
     st.title("Spotify Data Explorer")
     st.markdown("Upload your Spotify data export ZIP file to explore your listening history!")
     
-    # Sidebar
+    # Sidebar - only upload functionality
     with st.sidebar:
         st.header("📁 Upload Data")
         uploaded_file = st.file_uploader(
@@ -113,44 +113,65 @@ def main():
             type=['zip'],
             help="Download your data from Spotify's privacy settings"
         )
+    
+    # Main content area
+    if uploaded_file is not None:
+        with st.spinner("Processing your Spotify data..."):
+            df = process_spotify_zip(uploaded_file)
         
-        if uploaded_file is not None:
-            with st.spinner("Processing your Spotify data..."):
-                df = process_spotify_zip(uploaded_file)
+        if df is not None:
+            metrics = calculate_metrics(df)
             
-            if df is not None:
-                metrics = calculate_metrics(df)
-                
-                st.success(f"✅ Processed {len(df):,} streams!")
-                
-                st.header("📊 Quick Stats")
+            st.success(f"✅ Processed {len(df):,} streams!")
+            
+            # Quick Stats in main area
+            st.header("📊 Quick Stats")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
                 st.metric("Total Listening Time", f"{metrics['total_hours']:.1f} hours")
+            with col2:
                 st.metric("Total Streams", f"{metrics['total_tracks']:,}")
+            with col3:
                 st.metric("Unique Artists", f"{metrics['unique_artists']:,}")
+            with col4:
                 st.metric("Unique Tracks", f"{metrics['unique_tracks']:,}")
-                
-                # Date range
-                date_range = st.date_input(
-                    "Filter by date range",
-                    value=(df['date'].min(), df['date'].max()),
-                    min_value=df['date'].min(),
-                    max_value=df['date'].max()
-                )
-                
-                # Filter dataframe by date range
-                if len(date_range) == 2:
-                    mask = (df['date'] >= date_range[0]) & (df['date'] <= date_range[1])
-                    df_filtered = df[mask]
-                    metrics_filtered = calculate_metrics(df_filtered)
-                else:
-                    df_filtered = df
-                    metrics_filtered = metrics
-                
-                # Main dashboard
-                if not df_filtered.empty:
-                    show_dashboard(df_filtered, metrics_filtered)
-                else:
-                    st.warning("No data in selected date range.")
+            
+            # Date range filter in main area
+            st.header("🗓️ Filter Data")
+            date_range = st.date_input(
+                "Select date range to analyze",
+                value=(df['date'].min(), df['date'].max()),
+                min_value=df['date'].min(),
+                max_value=df['date'].max()
+            )
+            
+            # Filter dataframe by date range
+            if len(date_range) == 2:
+                mask = (df['date'] >= date_range[0]) & (df['date'] <= date_range[1])
+                df_filtered = df[mask]
+                metrics_filtered = calculate_metrics(df_filtered)
+            else:
+                df_filtered = df
+                metrics_filtered = metrics
+            
+            # Main dashboard
+            if not df_filtered.empty:
+                show_dashboard(df_filtered, metrics_filtered)
+            else:
+                st.warning("No data in selected date range.")
+    else:
+        # Show instructions when no file is uploaded
+        st.info("👆 Please upload your Spotify data ZIP file using the sidebar to begin exploring your listening history!")
+        
+        with st.expander("📋 How to get your Spotify data"):
+            st.markdown("""
+            1. Go to [Spotify's Privacy Settings](https://www.spotify.com/account/privacy/)
+            2. Log in to your Spotify account
+            3. Scroll down to "Download your data"
+            4. Request your "Extended streaming history" (this may take a few days)
+            5. Once ready, download the ZIP file
+            6. Upload it using the file uploader above
+            """)
 
 def show_dashboard(df, metrics):
     """Display the main dashboard with charts and tables"""

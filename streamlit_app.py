@@ -233,6 +233,19 @@ def show_dashboard(df, metrics):
                 names=platform_data.index,
                 title="Listening by Platform"
             )
+            # Update layout to show percentages inside and set minimum text size
+            fig_platform.update_traces(
+                textposition='inside',
+                textinfo='percent+label',
+                textfont_size=12
+            )
+            # Only show text where it fits
+            fig_platform.update_traces(
+                textposition='inside',
+                texttemplate='%{percent}<br>%{label}',
+                textfont_size=12,
+                insidetextorientation='radial'
+            )
             st.plotly_chart(fig_platform, use_container_width=True)
         else:
             st.info(f"All listening on: {platform_data.index[0]}")

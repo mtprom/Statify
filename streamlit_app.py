@@ -187,7 +187,7 @@ def show_dashboard(df, metrics):
             orientation='h',
             labels={'x': 'Hours Listened', 'y': 'Artist'},
             color=metrics['top_artists'].values,
-            color_continuous_scale='viridis'
+            color_continuous_scale='plasma'
         )
         fig_artists.update_layout(height=400, showlegend=False)
         st.plotly_chart(fig_artists, use_container_width=True)
@@ -261,6 +261,68 @@ def show_dashboard(df, metrics):
         # Average listening time
         avg_listen_time = df['ms_played'].mean() / 1000
         st.metric("Average Listen Time", f"{avg_listen_time:.0f} seconds")
+    
+    # Artist Deep Dive
+    st.subheader("Artist Deep Dive")
+    st.write("Select any of your top artists to see their most played songs:")
+    
+    # Get top artists for selection
+    top_artists_list = metrics['top_artists'].index.tolist()
+    selected_artist = st.selectbox(
+        "Choose an artist to explore:",
+        options=top_artists_list,
+        help="Select an artist from your top listened artists"
+    )
+    
+    if selected_artist:
+        # Filter data for selected artist
+        artist_df = df[df['artist'] == selected_artist]
+        
+        # Get top songs for this artist
+        artist_top_songs = artist_df.groupby('track_name')['hours_played'].sum().nlargest(10)
+        
+        if not artist_top_songs.empty:
+            col5, col6 = st.columns(2)
+            
+            with col5:
+                # Chart of top songs by this artist
+                fig_artist_songs = px.bar(
+                    x=artist_top_songs.values,
+                    y=artist_top_songs.index,
+                    orientation='h',
+                    labels={'x': 'Hours Listened', 'y': 'Track'},
+                    title=f"Top Songs by {selected_artist}",
+                    color=artist_top_songs.values,
+                    color_continuous_scale='plasma'
+                )
+                fig_artist_songs.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig_artist_songs, use_container_width=True)
+            
+            with col6:
+                # Stats for this artist
+                total_artist_hours = artist_df['hours_played'].sum()
+                total_artist_plays = len(artist_df)
+                unique_songs = artist_df['track_name'].nunique()
+                st.metric("Total Hours Listened", f"{total_artist_hours:.1f}")
+                st.metric("Total Plays", f"{total_artist_plays:,}")
+                st.metric("Unique Songs", f"{unique_songs:,}")
+
+                # Artist listening timeline
+                artist_monthly = artist_df.groupby('month')['hours_played'].sum()
+                if len(artist_monthly) > 1:
+                    st.write("**Monthly Listening Pattern:**")
+                    artist_monthly_data = artist_monthly.reset_index()
+                    artist_monthly_data['month_str'] = artist_monthly_data['month'].astype(str)
+                    fig_artist_timeline = px.line(
+                        artist_monthly_data,
+                        x='month_str',
+                        y='hours_played',
+                        title=f"{selected_artist} - Monthly Hours"
+                    )
+                    fig_artist_timeline.update_layout(height=300, showlegend=False)
+                    st.plotly_chart(fig_artist_timeline, use_container_width=True)
+        else:
+            st.warning(f"No tracks found for {selected_artist} in the selected date range.")
     
     # Detailed Tables
     with st.expander("📋 Detailed Data Tables"):

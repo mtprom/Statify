@@ -324,6 +324,44 @@ def show_dashboard(df, metrics):
         else:
             st.warning(f"No tracks found for {selected_artist} in the selected date range.")
     
+    # Track Forensics Section
+    st.subheader("🔍 Track Forensics")
+    st.write("Deep dive into the play history of individual tracks:")
+    
+    # Get all unique tracks with play counts for selection
+    track_play_counts = df.groupby(['track_name', 'artist']).agg({
+        'timestamp': 'count',
+        'hours_played': 'sum'
+    }).rename(columns={'timestamp': 'play_count'}).reset_index()
+    track_play_counts = track_play_counts.sort_values('play_count', ascending=False)
+    
+    # Create track selection options (limit to tracks with at least 2 plays for meaningful analysis)
+    forensics_tracks = track_play_counts[track_play_counts['play_count'] >= 2]
+    track_options = [f"{row['track_name']} - {row['artist']} ({row['play_count']} plays)" 
+                     for _, row in forensics_tracks.head(50).iterrows()]
+    
+    if not track_options:
+        st.info("No tracks with multiple plays found for forensics analysis.")
+    else:
+        selected_track_option = st.selectbox(
+            "Select a track to analyze:",
+            options=track_options,
+            help="Choose from your most played tracks for detailed analysis"
+        )
+        
+        if selected_track_option:
+            # Extract track name and artist from selection
+            track_info = selected_track_option.split(" - ")
+            selected_track_name = track_info[0]
+            selected_artist = track_info[1].split(" (")[0]
+            
+            # Filter data for selected track
+            track_data = df[(df['track_name'] == selected_track_name) & 
+                           (df['artist'] == selected_artist)].copy()
+            
+            if not track_data.empty:
+                show_track_forensics(track_data, selected_track_name, selected_artist)
+    
     # Detailed Tables
     with st.expander("📋 Detailed Data Tables"):
         tab1, tab2, tab3, tab4 = st.tabs(["Top Artists", "Top Tracks", "Most Skipped", "Recent Activity"])
@@ -356,6 +394,104 @@ def show_dashboard(df, metrics):
             recent_df['minutes_played'] = (recent_df['ms_played'] / (1000 * 60)).round(2)
             recent_df = recent_df.drop('ms_played', axis=1)
             st.dataframe(recent_df, use_container_width=True)
+
+def show_track_forensics(track_data, track_name, artist):
+    """Display detailed forensics analysis for a specific track"""
+    
+    # Sort by timestamp for chronological analysis
+    track_data = track_data.sort_values('timestamp')
+    
+    # Calculate key metrics
+    total_plays = len(track_data)
+    total_time = track_data['hours_played'].sum()
+    avg_listen_time = track_data['ms_played'].mean() / 1000
+    skip_count = (track_data['ms_played'] < 15000).sum()
+    skip_rate = (skip_count / total_plays) * 100 if total_plays > 0 else 0
+    
+    # Find listening streaks (consecutive days)
+    track_data['date_only'] = track_data['timestamp'].dt.date
+    daily_plays = track_data.groupby('date_only').size()
+    
+    # Create three columns for the forensics display
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(f"### 📊 {track_name}")
+        st.markdown(f"**by {artist}**")
+        st.metric("Total Plays", f"{total_plays:,}")
+        st.metric("Total Listen Time", f"{total_time:.1f} hours")
+        st.metric("Average Listen Time", f"{avg_listen_time:.0f} seconds")
+        st.metric("Skip Rate", f"{skip_rate:.1f}%")
+    
+    with col2:
+        st.markdown("### 📅 Play Timeline")
+        if len(daily_plays) > 1:
+            # Timeline chart showing daily plays
+            timeline_data = daily_plays.reset_index()
+            timeline_data.columns = ['Date', 'Plays']
+            
+            fig_timeline = px.bar(
+                timeline_data,
+                x='Date',
+                y='Plays',
+                title=f"Daily Plays Timeline",
+                labels={'Date': 'Date', 'Plays': 'Number of Plays'}
+            )
+            fig_timeline.update_layout(height=300, showlegend=False)
+            st.plotly_chart(fig_timeline, use_container_width=True)
+        else:
+            st.info("Only played on one day")
+    
+    with col3:
+        st.markdown("### ⏱️ Listen Duration Pattern")
+        
+        # Create listen duration histogram
+        listen_seconds = track_data['ms_played'] / 1000
+        
+        # Create bins for listen duration
+        fig_duration = px.histogram(
+            x=listen_seconds,
+            nbins=20,
+            title="Listen Duration Distribution",
+            labels={'x': 'Listen Duration (seconds)', 'y': 'Number of Plays'}
+        )
+        fig_duration.update_layout(height=300, showlegend=False)
+        st.plotly_chart(fig_duration, use_container_width=True)
+    
+    # Additional detailed analysis
+    st.markdown("### 🕐 Listening Patterns")
+    
+    # Hour of day analysis
+    track_data['hour'] = track_data['timestamp'].dt.hour
+    hourly_plays = track_data.groupby('hour').size()
+    
+    if len(hourly_plays) > 1:
+        fig_hourly = px.bar(
+            x=hourly_plays.index,
+            y=hourly_plays.values,
+            title="Plays by Hour of Day",
+            labels={'x': 'Hour of Day', 'y': 'Number of Plays'}
+        )
+        fig_hourly.update_layout(height=300, showlegend=False)
+        st.plotly_chart(fig_hourly, use_container_width=True)
+    else:
+        most_common_hour = hourly_plays.index[0]
+        st.info(f"Most commonly played at hour: {most_common_hour}:00")
+    
+    # Chronological play history table
+    st.markdown("### 📋 Complete Play History")
+    
+    # Prepare detailed history
+    history_df = track_data[['timestamp', 'ms_played', 'platform', 'skipped', 'shuffle', 'offline']].copy()
+    history_df['listen_duration'] = (history_df['ms_played'] / 1000).round(1)
+    history_df['likely_skipped'] = history_df['ms_played'] < 15000
+    history_df = history_df.drop('ms_played', axis=1)
+    history_df.columns = ['Timestamp', 'Platform', 'Skipped', 'Shuffle', 'Offline', 'Duration (sec)', 'Likely Skipped']
+    
+    # Show most recent plays first
+    history_df = history_df.sort_values('Timestamp', ascending=False)
+    
+    st.dataframe(history_df, use_container_width=True, height=300)
 
 if __name__ == "__main__":
     main()

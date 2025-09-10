@@ -338,7 +338,7 @@ def show_dashboard(df, metrics):
     # Create track selection options (limit to tracks with at least 2 plays for meaningful analysis)
     forensics_tracks = track_play_counts[track_play_counts['play_count'] >= 2]
     track_options = [f"{row['track_name']} - {row['artist']} ({row['play_count']} plays)" 
-                     for _, row in forensics_tracks.head(50).iterrows()]
+                     for _, row in forensics_tracks.head(100).iterrows()]
     
     if not track_options:
         st.info("No tracks with multiple plays found for forensics analysis.")
@@ -407,6 +407,7 @@ def show_track_forensics(track_data, track_name, artist):
     avg_listen_time = track_data['ms_played'].mean() / 1000
     skip_count = (track_data['ms_played'] < 15000).sum()
     skip_rate = (skip_count / total_plays) * 100 if total_plays > 0 else 0
+    total_plays = len(track_data) - skip_count
     
     # Find listening streaks (consecutive days)
     track_data['date_only'] = track_data['timestamp'].dt.date
